@@ -473,6 +473,17 @@
   .stage-arrow.arrow-left { left: 8px; }
   .stage-arrow.arrow-left .arrow-glyph { display: inline-block; transform: scaleX(-1); }
 
+  .stage-arrow-vert {
+    position: absolute; left: 50%; transform: translateX(-50%); z-index: 300;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(20,14,26,0.75); border: 1px solid rgba(245,203,31,0.5);
+    color: #F3EEE4; font-size: 14px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; backdrop-filter: blur(2px);
+  }
+  .stage-arrow-vert:active { background: rgba(245,203,31,0.85); color: #241c2c; }
+  .stage-arrow-vert.arrow-down { bottom: 8px; }
+  .stage-arrow-vert.arrow-up { top: 8px; }
+
   .work-stage { background: #241a33; }
   .work-float-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
   .work-float {
@@ -539,6 +550,7 @@
     <button class="menu-toggle hidden" id="furnBackBtn">← もどる</button>
     <button class="stage-arrow arrow-right" id="workEnterArrow" title="しごとへ">→</button>
     <button class="stage-arrow arrow-left" id="farmEnterArrow" title="はたけへ"><span class="arrow-glyph">→</span></button>
+    <button class="stage-arrow-vert arrow-down" id="basementEnterArrow" title="ちかしつへ">↓</button>
     <div class="drag-highlight" id="dragHighlight"></div>
     <div id="furnLayer"></div>
     <div class="coffin-zzz-wrap hidden" id="coffinZzz"><div class="zzz-float" id="coffinZzzInner">Z z z</div></div>
@@ -590,6 +602,17 @@
     <img class="room-bg" src="farm.png" alt="farm" />
     <button class="stage-arrow arrow-right" id="farmExitArrow" title="いえに かえる">→</button>
     <div id="farmPlotLayer"></div>
+  </div>
+
+  <div class="room work-stage hidden" id="basementStage">
+    <img class="room-bg" src="basement_wall.png" alt="basement wall" />
+    <img class="room-bg" src="basement_floor.png" alt="basement floor" />
+    <div class="pet-anchor" id="basementCharAnchor" style="left:50%; top:62%;">
+      <div class="pet-scale" id="basementCharScale">
+        <img class="pet-sprite" id="basementCharSprite" src="basement_char_front.png" alt="basement character" />
+      </div>
+    </div>
+    <button class="stage-arrow-vert arrow-up" id="basementExitArrow" title="いえに かえる">↑</button>
   </div>
 
   <div class="room hidden" id="gachaScreen">
@@ -756,6 +779,12 @@
   const WALLPAPER_PINK_IMG = "wallpaper_pink.png";
   const FLOOR_WHITE_IMG = "floor_white.png";
   const FLOOR_TOYA_TAGAME_IMG = "floor_toya_tagame.png";
+  const BASEMENT_WALL_IMG = "basement_wall.png";
+  const BASEMENT_FLOOR_IMG = "basement_floor.png";
+  const BASEMENT_CHAR_FRONT_IMG = "basement_char_front.png";
+  const BASEMENT_CHAR_BACK_IMG = "basement_char_back.png";
+  const BASEMENT_CHAR_LEFT_IMG = "basement_char_left.png";
+  const BASEMENT_CHAR_RIGHT_IMG = "basement_char_right.png";
   const MIRROR_IMG = "mirror.png";
   const MIRROR_GUN_IMG = "mirror_gun.png";
   const MIRROR_PINK_IMG = "mirror_pink.png";
@@ -1083,6 +1112,7 @@
   const SCENES = {
     home:    { BACK_Y: 0.3868, BACK_L: 0.1426, BACK_R: 0.8588, FRONT_Y: 0.9492, FRONT_L: 0.0250, FRONT_R: 0.9750 },
     factory: { BACK_Y: 0.54,   BACK_L: 0.08,   BACK_R: 0.92,   FRONT_Y: 0.95,   FRONT_L: 0.02,   FRONT_R: 0.98 },
+    basement:{ BACK_Y: 0.3868, BACK_L: 0.1426, BACK_R: 0.8588, FRONT_Y: 0.9492, FRONT_L: 0.0250, FRONT_R: 0.9750 },
   };
   const GRID_SIZE = 6; // 6 x 6, shared by every scene
 
@@ -1298,6 +1328,12 @@
   const farmEnterArrow = document.getElementById("farmEnterArrow");
   const farmExitArrow = document.getElementById("farmExitArrow");
   const farmPlotLayer = document.getElementById("farmPlotLayer");
+  const basementStage = document.getElementById("basementStage");
+  const basementEnterArrow = document.getElementById("basementEnterArrow");
+  const basementExitArrow = document.getElementById("basementExitArrow");
+  const basementCharAnchor = document.getElementById("basementCharAnchor");
+  const basementCharScale = document.getElementById("basementCharScale");
+  const basementCharSprite = document.getElementById("basementCharSprite");
 
   function save() {
     state.lastSaved = Date.now();
@@ -3700,6 +3736,13 @@
     return m + ":" + String(s).padStart(2, "0");
   }
 
+  function formatHourMin(ms) {
+    const totalMin = Math.max(0, Math.ceil(ms / 60000));
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return h + "時間" + String(m).padStart(2, "0") + "分";
+  }
+
   function updateWashBtn() {
     const washer = findWashFurniture();
     if (!washer || scene !== "home") { washBtn.classList.add("hidden"); return; }
@@ -3708,7 +3751,7 @@
     if (mode === "washing") {
       washBtn.disabled = false;
       washBtn.classList.remove("cooldown");
-      washLabel.textContent = "とめる (" + formatMinSec(state.washingUntil - now) + ")";
+      washLabel.textContent = "とめる (" + Math.max(0, Math.ceil((state.washingUntil - now) / 60000)) + "分)";
     } else if (state.washerCooldownUntil && now < state.washerCooldownUntil) {
       washBtn.disabled = false;
       washBtn.classList.add("cooldown");
@@ -3787,7 +3830,7 @@
     if (mode === "washing") { cancelWash(); return; }
     const now = Date.now();
     if (state.washerCooldownUntil && now < state.washerCooldownUntil) {
-      showToast("クールタイム中… あと " + formatMinSec(state.washerCooldownUntil - now));
+      showToast("クールタイム中… あと " + formatHourMin(state.washerCooldownUntil - now));
       return;
     }
     startWash();
@@ -3998,6 +4041,7 @@
     if (name === "factory") {
       room.classList.add("hidden");
       farmStage.classList.add("hidden");
+      basementStage.classList.add("hidden");
       workStage.classList.remove("hidden");
       homeActions.classList.add("hidden");
       renderWorkPosition();
@@ -4005,13 +4049,21 @@
     } else if (name === "farm") {
       room.classList.add("hidden");
       workStage.classList.add("hidden");
+      basementStage.classList.add("hidden");
       farmStage.classList.remove("hidden");
       homeActions.classList.add("hidden");
       renderFarmPlots();
+    } else if (name === "basement") {
+      room.classList.add("hidden");
+      workStage.classList.add("hidden");
+      farmStage.classList.add("hidden");
+      basementStage.classList.remove("hidden");
+      homeActions.classList.add("hidden");
     } else {
       room.classList.remove("hidden");
       workStage.classList.add("hidden");
       farmStage.classList.add("hidden");
+      basementStage.classList.add("hidden");
       homeActions.classList.remove("hidden");
       updateWashBtn();
     }
@@ -4105,6 +4157,52 @@
     showScene("farm");
   });
   farmExitArrow.addEventListener("click", () => showScene("home"));
+
+  basementEnterArrow.addEventListener("click", () => {
+    if (editMode) { showToast("かぐの配置中は行けないよ"); return; }
+    foodTray.classList.add("hidden");
+    showScene("basement");
+  });
+  basementExitArrow.addEventListener("click", () => showScene("home"));
+
+  // ---------------- basement wandering character ----------------
+  let basementCharCol = 2, basementCharRow = 3;
+  let basementCharTarget = null;
+  let basementCharPauseUntil = 0;
+  let basementCharPoseScale = 1;
+
+  function renderBasementCharPosition() {
+    const p = projectGridIn("basement", basementCharCol, basementCharRow);
+    basementCharAnchor.style.left = p.xPct + "%";
+    basementCharAnchor.style.top = p.yPct + "%";
+    basementCharAnchor.style.zIndex = 100 + basementCharRow * 10 + 5;
+    basementCharScale.style.transform = "scale(" + (p.scale * basementCharPoseScale) + ")";
+  }
+  renderBasementCharPosition();
+
+  function basementCharTick() {
+    if (scene !== "basement") return;
+    if (Date.now() < basementCharPauseUntil) return;
+    if (!basementCharTarget) {
+      const newCol = Math.max(0, Math.min(GRID_SIZE - 1, basementCharCol + Math.floor(Math.random() * 5) - 2));
+      const newRow = Math.max(0, Math.min(GRID_SIZE - 1, basementCharRow + Math.floor(Math.random() * 5) - 2));
+      const dc = newCol - basementCharCol;
+      const dr = newRow - basementCharRow;
+      if (Math.abs(dc) > Math.abs(dr)) {
+        basementCharSprite.src = dc < 0 ? BASEMENT_CHAR_LEFT_IMG : BASEMENT_CHAR_RIGHT_IMG;
+        basementCharPoseScale = 1.18;
+      } else if (dr !== 0) {
+        basementCharSprite.src = dr < 0 ? BASEMENT_CHAR_BACK_IMG : BASEMENT_CHAR_FRONT_IMG;
+        basementCharPoseScale = 1;
+      }
+      basementCharCol = newCol;
+      basementCharRow = newRow;
+      renderBasementCharPosition();
+      basementCharPauseUntil = Date.now() + 900 + Math.random() * 2200;
+      basementCharTarget = null;
+    }
+  }
+  setInterval(basementCharTick, 400);
 
   const resetConfirmModal = document.getElementById("resetConfirmModal");
   const resetCancelBtn = document.getElementById("resetCancelBtn");
